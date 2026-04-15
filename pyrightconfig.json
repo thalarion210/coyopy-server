@@ -1,0 +1,11 @@
+{
+    "include": [
+        "coyote_server",
+        "tests"
+    ],
+    "extraPaths": [
+        "."
+    ],
+    "venvPath": ".",
+    "typeCheckingMode": "basic"
+}

@@ -1,0 +1,9 @@
+-r requirements.txt
+-e .
+build>=1.2
+httpx>=0.28
+mypy>=1.15
+pytest>=8.3
+pytest-asyncio>=0.25
+pytest-cov>=6.0
+ruff>=0.11

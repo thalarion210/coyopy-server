@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coyote-server"
+dynamic = ["version"]
+description = "FastAPI server and lightweight web UI for controlling the DG-Labs Coyote"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+  "coyopy @ git+https://github.com/thalarion210/coyopy.git@main",
+  "fastapi>=0.115",
+  "pydantic>=2.10",
+  "uvicorn[standard]>=0.34",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "httpx>=0.28",
+  "mypy>=1.15",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "pytest-cov>=6.0",
+  "ruff>=0.11",
+]
+
+[project.scripts]
+coyote-server = "coyote_server.main:run"
+
+[tool.hatch.version]
+path = "coyote_server/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["coyote_server"]
+
+[tool.coverage.run]
+source = ["coyote_server"]
+data_file = "/tmp/.coverage.coyote-server"
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["coyote_server"]
+
+[[tool.mypy.overrides]]
+module = ["coyopy", "coyopy.*"]
+ignore_missing_imports = true

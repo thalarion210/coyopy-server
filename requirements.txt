@@ -1,0 +1,4 @@
+coyopy @ git+https://github.com/thalarion210/coyopy.git@main
+fastapi>=0.115
+pydantic>=2.10
+uvicorn[standard]>=0.34

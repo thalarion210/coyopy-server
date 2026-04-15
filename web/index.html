@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="REST API and lightweight control UI for the DG-Labs Coyote device." />
+  <meta name="keywords" content="coyote, estim, fastapi, bluetooth, control" />
+  <title>Coyote Server</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>Coyote Server</h1>
+        <p class="hint">REST API, telemetry and basic device control. Games live in a separate app.</p>
+      </div>
+      <div class="header-status">
+        <span id="status-dot" class="dot disconnected"></span>
+        <span id="status-label">Disconnected</span>
+        <span id="battery-badge" class="battery hidden">Battery <span id="battery-value">--</span>%</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" id="connect-panel">
+      <h2>Connection</h2>
+      <div class="row">
+        <button id="btn-scan" class="btn">Scan</button>
+        <select id="device-select" class="device-select">
+          <option value="">-- scan for devices --</option>
+        </select>
+        <button id="btn-connect" class="btn primary" disabled>Connect</button>
+        <button id="btn-disconnect" class="btn danger hidden">Disconnect</button>
+        <a class="btn" href="/docs" target="_blank" rel="noreferrer">API docs</a>
+      </div>
+      <p id="scan-status" class="hint"></p>
+    </section>
+
+    <div class="channels" id="channels" aria-live="polite">
+      <div class="channel-card" id="card-a">
+        <h2>Channel A</h2>
+        <div class="power-row">
+          <label for="power-a">Power</label>
+          <div class="adj-group">
+            <button class="btn adj" id="pow-a-m5" disabled>-5</button>
+            <button class="btn adj" id="pow-a-m1" disabled>-1</button>
+            <input type="range" id="power-a" min="0" max="100" value="0" disabled />
+            <button class="btn adj" id="pow-a-p1" disabled>+1</button>
+            <button class="btn adj" id="pow-a-p5" disabled>+5</button>
+          </div>
+          <span class="power-value" id="power-value-a">0%</span>
+        </div>
+        <div class="mode-row">
+          <label for="mode-a">Mode</label>
+          <select id="mode-a" disabled>
+            <option value="none">None</option>
+            <option value="breath">Breath</option>
+            <option value="waves">Waves</option>
+            <option value="climb">Climb</option>
+            <option value="reverse_climb">Reverse Climb</option>
+            <option value="toggle">Toggle</option>
+            <option value="tease">Tease</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="param-row hidden" id="param-row-a">
+          <div class="param-subrow">
+            <label for="speed-a">Speed</label>
+            <div class="adj-group">
+              <button class="btn adj" id="spd-a-m5" disabled>-.5</button>
+              <button class="btn adj" id="spd-a-m1" disabled>-.1</button>
+              <input type="range" id="speed-a" min="0.1" max="5" step="0.1" value="1" disabled />
+              <button class="btn adj" id="spd-a-p1" disabled>+.1</button>
+              <button class="btn adj" id="spd-a-p5" disabled>+.5</button>
+            </div>
+            <span class="param-value" id="speed-value-a">1.0x</span>
+          </div>
+          <div class="param-subrow">
+            <label for="freq-a">Freq</label>
+            <div class="adj-group">
+              <button class="btn adj" id="frq-a-m5" disabled>-5</button>
+              <button class="btn adj" id="frq-a-m1" disabled>-1</button>
+              <input type="range" id="freq-a" min="10" max="240" step="1" value="15" disabled />
+              <button class="btn adj" id="frq-a-p1" disabled>+1</button>
+              <button class="btn adj" id="frq-a-p5" disabled>+5</button>
+            </div>
+            <span class="param-value" id="freq-value-a">15 Hz</span>
+            <label class="dyn-label"><input type="checkbox" id="freq-dyn-a" /> Dyn</label>
+          </div>
+        </div>
+        <div class="live-row" id="live-row-a">
+          <span class="live-label">Live</span>
+          <div class="amp-bar"><div class="amp-fill" id="amp-fill-a"></div></div>
+          <span class="live-value amp" id="live-amp-a">-- %</span>
+          <span class="live-sep">|</span>
+          <span class="live-value freq" id="live-freq-a">-- Hz</span>
+        </div>
+        <div class="custom-row hidden" id="custom-row-a">
+          <label for="custom-a">Custom frames (JSON)</label>
+          <textarea id="custom-a" rows="4" placeholder='[{"frequency":15,"amplitude":50}]'></textarea>
+          <button class="btn" id="btn-custom-a">Apply</button>
+        </div>
+      </div>
+
+      <div class="channel-card" id="card-b">
+        <h2>Channel B</h2>
+        <div class="power-row">
+          <label for="power-b">Power</label>
+          <div class="adj-group">
+            <button class="btn adj" id="pow-b-m5" disabled>-5</button>
+            <button class="btn adj" id="pow-b-m1" disabled>-1</button>
+            <input type="range" id="power-b" min="0" max="100" value="0" disabled />
+            <button class="btn adj" id="pow-b-p1" disabled>+1</button>
+            <button class="btn adj" id="pow-b-p5" disabled>+5</button>
+          </div>
+          <span class="power-value" id="power-value-b">0%</span>
+        </div>
+        <div class="mode-row">
+          <label for="mode-b">Mode</label>
+          <select id="mode-b" disabled>
+            <option value="none">None</option>
+            <option value="breath">Breath</option>
+            <option value="waves">Waves</option>
+            <option value="climb">Climb</option>
+            <option value="reverse_climb">Reverse Climb</option>
+            <option value="toggle">Toggle</option>
+            <option value="tease">Tease</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="param-row hidden" id="param-row-b">
+          <div class="param-subrow">
+            <label for="speed-b">Speed</label>
+            <div class="adj-group">
+              <button class="btn adj" id="spd-b-m5" disabled>-.5</button>
+              <button class="btn adj" id="spd-b-m1" disabled>-.1</button>
+              <input type="range" id="speed-b" min="0.1" max="5" step="0.1" value="1" disabled />
+              <button class="btn adj" id="spd-b-p1" disabled>+.1</button>
+              <button class="btn adj" id="spd-b-p5" disabled>+.5</button>
+            </div>
+            <span class="param-value" id="speed-value-b">1.0x</span>
+          </div>
+          <div class="param-subrow">
+            <label for="freq-b">Freq</label>
+            <div class="adj-group">
+              <button class="btn adj" id="frq-b-m5" disabled>-5</button>
+              <button class="btn adj" id="frq-b-m1" disabled>-1</button>
+              <input type="range" id="freq-b" min="10" max="240" step="1" value="15" disabled />
+              <button class="btn adj" id="frq-b-p1" disabled>+1</button>
+              <button class="btn adj" id="frq-b-p5" disabled>+5</button>
+            </div>
+            <span class="param-value" id="freq-value-b">15 Hz</span>
+            <label class="dyn-label"><input type="checkbox" id="freq-dyn-b" /> Dyn</label>
+          </div>
+        </div>
+        <div class="live-row" id="live-row-b">
+          <span class="live-label">Live</span>
+          <div class="amp-bar"><div class="amp-fill" id="amp-fill-b"></div></div>
+          <span class="live-value amp" id="live-amp-b">-- %</span>
+          <span class="live-sep">|</span>
+          <span class="live-value freq" id="live-freq-b">-- Hz</span>
+        </div>
+        <div class="custom-row hidden" id="custom-row-b">
+          <label for="custom-b">Custom frames (JSON)</label>
+          <textarea id="custom-b" rows="4" placeholder='[{"frequency":15,"amplitude":50}]'></textarea>
+          <button class="btn" id="btn-custom-b">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <p id="error-banner" class="error-banner hidden"></p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

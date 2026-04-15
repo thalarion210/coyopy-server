@@ -1,0 +1,15 @@
+.coverage
+.coverage.*
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+build/
+dist/
+htmlcov/
+*.egg-info/
+.ruff_cache/
+.venv/
+venv/
+.python-version
+.DS_Store
+coverage.xml
