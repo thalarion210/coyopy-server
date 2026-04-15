@@ -9,6 +9,10 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from coyopy import CoyoteDevice, DeviceEvent, scan_for_coyote
+from coyopy.channel import CoyoteChannel
+from fastapi import APIRouter, HTTPException
+
 from coyote_server.models import (
     ChannelStateResponse,
     ConnectRequest,
@@ -25,10 +29,6 @@ from coyote_server.models import (
 )
 from coyote_server.state import app_state
 from coyote_server.ws import ws_manager
-from fastapi import APIRouter, HTTPException
-
-from coyopy import CoyoteDevice, DeviceEvent, scan_for_coyote
-from coyopy.channel import CoyoteChannel
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["device"])
