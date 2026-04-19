@@ -54,16 +54,41 @@ pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
+In this multi-root workspace you can also bind the sibling coyopy checkout directly for development:
+
+```bash
+pip install -e ../coyopy
+pip install -e .
+```
+
+That keeps local development tied to the neighboring repository checkout while Docker and GitHub builds continue to use the declared packaged dependency.
+
 ## Run
 
 ```bash
-coyote-server
+python main.py
 ```
 
 Then open:
 
 - http://127.0.0.1:8000 for the browser UI
 - http://127.0.0.1:8000/docs for the OpenAPI UI
+
+Alternative starts:
+
+```bash
+coyote-server
+```
+
+```bash
+uvicorn coyote_server.main:app --reload
+```
+
+Environment variables used by the entrypoint:
+
+- COYOTE_SERVER_HOST, default 0.0.0.0
+- COYOTE_SERVER_PORT, default 8000
+- COYOTE_SERVER_RELOAD, default false
 
 ## API summary
 
@@ -108,8 +133,54 @@ Current validated state in this workspace:
 
 - coyote_server/ contains the packaged FastAPI application
 - tests/ contains API, model, state, websocket and entrypoint tests
-- web/ contains the static browser UI
+- coyote_server/web/ contains the packaged static browser UI
 - docs/ contains API and development notes
+
+## Docker deployment
+
+The repository supports a split deployment model with two services:
+
+- an API container running FastAPI and device logic
+- a web container running nginx for static assets and reverse proxying /api, /ws and /docs to the API
+
+Build locally:
+
+```bash
+docker build -f Dockerfile.api -t coyote-server-api .
+docker build -f Dockerfile.web -t coyote-server-web .
+```
+
+Run locally as two containers:
+
+```bash
+export GHCR_OWNER=your-github-user-or-org
+docker compose -f compose.deploy.yml up
+```
+
+The example compose file publishes the web frontend on port 8080 and keeps the API internal.
+
+Optional image tag override:
+
+```bash
+export COYOTE_SERVER_TAG=v0.1.0
+```
+
+For Linux BLE access on Unraid, the API container may need additional host-specific configuration such as DBus mounts, device mappings or elevated privileges depending on how Bluetooth is exposed on your server.
+
+## GitHub container pipeline
+
+The workflow in .github/workflows/docker.yml builds two images:
+
+- ghcr.io/<owner>/coyote-server-api
+- ghcr.io/<owner>/coyote-server-web
+
+Behavior:
+
+- pull requests build both images without publishing
+- pushes to main build and publish fresh images
+- version tags like v0.2.0 publish versioned image tags
+
+This is designed for direct consumption from Unraid via GHCR.
 
 ## GitHub readiness
 

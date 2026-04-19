@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      COYOTE_SERVER_HOST: 0.0.0.0
+      COYOTE_SERVER_PORT: 8000
+      COYOTE_AUTO_CONNECT: ${COYOTE_AUTO_CONNECT:-true}
+    # Bluetooth (BLE) access via host BlueZ / D-Bus
+    volumes:
+      - /var/run/dbus:/var/run/dbus:ro
+    privileged: true
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"

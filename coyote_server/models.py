@@ -52,6 +52,7 @@ class StatusResponse(BaseModel):
     connected: bool
     address: str | None
     battery: int
+    auto_connect: bool
     channel_a: ChannelStateResponse
     channel_b: ChannelStateResponse
 
@@ -101,6 +102,14 @@ class PatternRequest(BaseModel):
         max_length=1024,
         description="Ordered list of waveform frames; will loop continuously.",
     )
+
+
+class AutoConnectRequest(BaseModel):
+    enabled: bool = Field(description="Whether to enable automatic scanning and reconnection.")
+
+
+class AutoConnectResponse(BaseModel):
+    enabled: bool
 
 
 # ---------------------------------------------------------------------------

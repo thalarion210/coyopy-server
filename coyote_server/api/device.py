@@ -4,16 +4,15 @@ API router: /api/device — scan, connect, disconnect, status.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from collections.abc import Callable
-from typing import Any
 
-from coyopy import CoyoteDevice, DeviceEvent, scan_for_coyote
+from coyopy import scan_for_coyote
 from coyopy.channel import CoyoteChannel
 from fastapi import APIRouter, HTTPException
 
 from coyote_server.models import (
+    AutoConnectRequest,
+    AutoConnectResponse,
     ChannelStateResponse,
     ConnectRequest,
     ConnectResponse,
@@ -21,14 +20,8 @@ from coyote_server.models import (
     ScanResponse,
     ScanResultItem,
     StatusResponse,
-    ws_battery_event,
-    ws_connected_event,
-    ws_disconnected_event,
-    ws_error_event,
-    ws_frame_event,
 )
 from coyote_server.state import app_state
-from coyote_server.ws import ws_manager
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["device"])
@@ -56,41 +49,6 @@ def _channel_state(ch: CoyoteChannel) -> ChannelStateResponse:
     )
 
 
-def _make_device_event_callback(
-    device: CoyoteDevice,
-) -> Callable[[DeviceEvent, dict[str, Any]], None]:
-    """Return a callback that broadcasts device events over WebSocket."""
-
-    _ = device
-
-    def _callback(event: DeviceEvent, data: dict[str, Any]) -> None:
-        async def _broadcast() -> None:
-            if event == DeviceEvent.CONNECTED:
-                payload = ws_connected_event(
-                    data.get("address", ""),
-                    data.get("battery", 0),
-                )
-                await ws_manager.broadcast(payload)
-            elif event == DeviceEvent.DISCONNECTED:
-                await ws_manager.broadcast(ws_disconnected_event())
-            elif event == DeviceEvent.BATTERY:
-                await ws_manager.broadcast(ws_battery_event(data.get("level", 0)))
-            elif event == DeviceEvent.FRAME:
-                await ws_manager.broadcast(ws_frame_event(data.get("a", {}), data.get("b", {})))
-            elif event == DeviceEvent.ERROR:
-                await ws_manager.broadcast(ws_error_event(str(data.get("source", "unknown"))))
-
-        # Schedule broadcast on the running event loop (callback is sync)
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_broadcast())
-        except RuntimeError:
-            pass
-
-    return _callback
-
-
 @router.get("/status", response_model=StatusResponse)
 async def get_status() -> StatusResponse:
     """Return the current connection status and channel state."""
@@ -99,6 +57,7 @@ async def get_status() -> StatusResponse:
         connected=dev.is_connected,
         address=dev.address,
         battery=dev.battery_level,
+        auto_connect=app_state.manager.enabled,
         channel_a=_channel_state(dev.channel_a),
         channel_b=_channel_state(dev.channel_b),
     )
@@ -144,15 +103,13 @@ async def connect(req: ConnectRequest | None = None) -> ConnectResponse:
             )
         address = app_state.last_scan[0]["address"]
 
-    # Replace the device instance and register the WS broadcast callback
-    async with app_state.lock:
-        app_state.device = CoyoteDevice()
-        app_state.device.on_event(_make_device_event_callback(app_state.device))
-        try:
-            await app_state.device.connect(address)
-        except Exception as exc:
-            log.exception("Connection failed")
-            raise HTTPException(status_code=500, detail=f"Connection failed: {exc}") from exc
+    # Pause auto-connect while connecting manually
+    app_state.manager.pause()
+    try:
+        await app_state.manager.connect_device(address)
+    except Exception as exc:
+        log.exception("Connection failed")
+        raise HTTPException(status_code=500, detail=f"Connection failed: {exc}") from exc
 
     return ConnectResponse(
         connected=True,
@@ -163,10 +120,15 @@ async def connect(req: ConnectRequest | None = None) -> ConnectResponse:
 
 @router.post("/disconnect")
 async def disconnect() -> dict[str, bool]:
-    """Disconnect from the current device."""
+    """Disconnect from the current device.
+
+    Also pauses auto-reconnect.  Call ``POST /api/auto-connect`` with
+    ``{"enabled": true}`` to re-enable it.
+    """
     if not app_state.device.is_connected:
         raise HTTPException(status_code=409, detail="Not connected.")
 
+    app_state.manager.pause()
     async with app_state.lock:
         try:
             await app_state.device.disconnect()
@@ -175,3 +137,13 @@ async def disconnect() -> dict[str, bool]:
             raise HTTPException(status_code=500, detail=f"Disconnect error: {exc}") from exc
 
     return {"disconnected": True}
+
+
+@router.post("/auto-connect", response_model=AutoConnectResponse)
+async def auto_connect(req: AutoConnectRequest) -> AutoConnectResponse:
+    """Enable or disable automatic device scanning and reconnection."""
+    if req.enabled:
+        app_state.manager.resume()
+    else:
+        app_state.manager.pause()
+    return AutoConnectResponse(enabled=app_state.manager.enabled)

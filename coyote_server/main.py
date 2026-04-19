@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +22,7 @@ from coyote_server.ws import ws_manager
 
 log = logging.getLogger(__name__)
 
-_WEB_DIR = Path(__file__).parent.parent / "web"
+_WEB_DIR = Path(__file__).parent / "web"
 
 
 @asynccontextmanager
@@ -29,10 +30,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: startup / shutdown hooks."""
     del app
     log.info("Coyote server starting up")
-    yield
-    # Ensure the device is disconnected cleanly when the server shuts down
     from coyote_server.state import app_state
 
+    auto_connect = os.getenv("COYOTE_AUTO_CONNECT", "true").lower() in {"1", "true", "yes", "on"}
+    if auto_connect:
+        await app_state.manager.start()
+    else:
+        app_state.manager.pause()
+        log.info("Auto-connect disabled via COYOTE_AUTO_CONNECT")
+    yield
+    # Stop the device manager and disconnect cleanly
+    await app_state.manager.stop()
     if app_state.device.is_connected:
         log.info("Disconnecting device on shutdown …")
         try:
@@ -130,7 +138,10 @@ else:
 
 def run() -> None:
     logging.basicConfig(level=logging.INFO)
-    uvicorn.run("coyote_server.main:app", host="0.0.0.0", port=8000, reload=False)
+    host = os.getenv("COYOTE_SERVER_HOST", "0.0.0.0")
+    port = int(os.getenv("COYOTE_SERVER_PORT", "8000"))
+    reload_enabled = os.getenv("COYOTE_SERVER_RELOAD", "false").lower() in {"1", "true", "yes", "on"}
+    uvicorn.run("coyote_server.main:app", host=host, port=port, reload=reload_enabled)
 
 
 if __name__ == "__main__":

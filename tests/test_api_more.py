@@ -19,8 +19,10 @@ from fastapi.testclient import TestClient
 
 import coyote_server.api.channels as channels_api
 import coyote_server.api.device as device_api
+import coyote_server.device_manager as dm_mod
 from coyote_server.api.channels import router as channels_router
 from coyote_server.api.device import router as device_router
+from coyote_server.device_manager import DeviceManager
 
 
 class FakeDevice:
@@ -47,11 +49,26 @@ class FakeDevice:
         self._cb = callback
 
 
+class FakeManager:
+    def __init__(self) -> None:
+        self.enabled = True
+
+    def pause(self) -> None:
+        self.enabled = False
+
+    def resume(self) -> None:
+        self.enabled = True
+
+    async def connect_device(self, address: str) -> None:
+        pass  # overridden per-test via patching
+
+
 def _make_state(device) -> SimpleNamespace:
     return SimpleNamespace(
         device=device,
         last_scan=[],
         lock=asyncio.Lock(),
+        manager=FakeManager(),
     )
 
 
@@ -138,28 +155,30 @@ class TestDeviceApiBranches:
 
     def test_connect_success_uses_last_scan_if_address_missing(self):
         client = _build_client()
-        state = _make_state(FakeDevice(connected=False))
+        fake_dev = FakeDevice(connected=False)
+        state = _make_state(fake_dev)
         state.last_scan = [{"address": "CC:DD"}]
-        new_dev = FakeDevice(connected=False)
 
-        with patch.object(device_api, "app_state", state), patch.object(
-            device_api, "CoyoteDevice", return_value=new_dev
-        ):
+        async def _connect(address: str) -> None:
+            fake_dev.is_connected = True
+            fake_dev.address = address
+            fake_dev.battery_level = 77
+
+        state.manager.connect_device = AsyncMock(side_effect=_connect)
+
+        with patch.object(device_api, "app_state", state):
             resp = client.post("/api/connect", json={})
 
         assert resp.status_code == 200
         assert resp.json()["address"] == "CC:DD"
-        assert state.device is new_dev
-        assert state.device.is_connected is True
+        state.manager.connect_device.assert_awaited_once_with("CC:DD")
 
     def test_connect_failure_returns_500(self):
         client = _build_client()
         state = _make_state(FakeDevice(connected=False))
-        new_dev = FakeDevice(connected=False, connect_error=RuntimeError("boom"))
+        state.manager.connect_device = AsyncMock(side_effect=RuntimeError("boom"))
 
-        with patch.object(device_api, "app_state", state), patch.object(
-            device_api, "CoyoteDevice", return_value=new_dev
-        ):
+        with patch.object(device_api, "app_state", state):
             resp = client.post("/api/connect", json={"address": "AA:BB"})
 
         assert resp.status_code == 500
@@ -191,45 +210,45 @@ class TestDeviceApiBranches:
 @pytest.mark.asyncio
 class TestDeviceCallbackBranches:
     async def test_callback_connected_event(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(device_api.ws_manager, "broadcast", new=AsyncMock()) as bcast:
-            cb(DeviceEvent.CONNECTED, {"address": "AA", "battery": 88})
+        mgr = DeviceManager()
+        with patch("coyote_server.ws.ws_manager", MagicMock(broadcast=AsyncMock())) as ws:
+            mgr._on_device_event(DeviceEvent.CONNECTED, {"address": "AA", "battery": 88})
             await asyncio.sleep(0)
-        bcast.assert_awaited_once()
+        ws.broadcast.assert_awaited_once()
 
     async def test_callback_disconnected_event(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(device_api.ws_manager, "broadcast", new=AsyncMock()) as bcast:
-            cb(DeviceEvent.DISCONNECTED, {})
+        mgr = DeviceManager()
+        with patch("coyote_server.ws.ws_manager", MagicMock(broadcast=AsyncMock())) as ws:
+            mgr._on_device_event(DeviceEvent.DISCONNECTED, {})
             await asyncio.sleep(0)
-        bcast.assert_awaited_once()
+        ws.broadcast.assert_awaited_once()
+        assert mgr._disconnected.is_set()
 
     async def test_callback_battery_event(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(device_api.ws_manager, "broadcast", new=AsyncMock()) as bcast:
-            cb(DeviceEvent.BATTERY, {"level": 42})
+        mgr = DeviceManager()
+        with patch("coyote_server.ws.ws_manager", MagicMock(broadcast=AsyncMock())) as ws:
+            mgr._on_device_event(DeviceEvent.BATTERY, {"level": 42})
             await asyncio.sleep(0)
-        bcast.assert_awaited_once()
+        ws.broadcast.assert_awaited_once()
 
     async def test_callback_frame_event(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(device_api.ws_manager, "broadcast", new=AsyncMock()) as bcast:
-            cb(DeviceEvent.FRAME, {"a": {"x": 1}, "b": {"y": 2}})
+        mgr = DeviceManager()
+        with patch("coyote_server.ws.ws_manager", MagicMock(broadcast=AsyncMock())) as ws:
+            mgr._on_device_event(DeviceEvent.FRAME, {"a": {"x": 1}, "b": {"y": 2}})
             await asyncio.sleep(0)
-        bcast.assert_awaited_once()
+        ws.broadcast.assert_awaited_once()
 
     async def test_callback_error_event(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(device_api.ws_manager, "broadcast", new=AsyncMock()) as bcast:
-            cb(DeviceEvent.ERROR, {"source": "test"})
+        mgr = DeviceManager()
+        with patch("coyote_server.ws.ws_manager", MagicMock(broadcast=AsyncMock())) as ws:
+            mgr._on_device_event(DeviceEvent.ERROR, {"source": "test"})
             await asyncio.sleep(0)
-        bcast.assert_awaited_once()
+        ws.broadcast.assert_awaited_once()
 
     async def test_callback_ignores_runtime_error_get_event_loop(self):
-        cb = device_api._make_device_event_callback(FakeDevice())
-        with patch.object(
-            device_api.asyncio,
-            "get_event_loop",
+        mgr = DeviceManager()
+        with patch(
+            "asyncio.get_event_loop",
             side_effect=RuntimeError("no loop"),
         ):
-            cb(DeviceEvent.CONNECTED, {"address": "AA", "battery": 1})
+            mgr._on_device_event(DeviceEvent.CONNECTED, {"address": "AA", "battery": 1})
