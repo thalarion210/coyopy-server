@@ -109,9 +109,7 @@ class DeviceManager:
             from coyote_server.ws import ws_manager
 
             if event == DeviceEvent.CONNECTED:
-                await ws_manager.broadcast(
-                    ws_connected_event(data.get("address", ""), data.get("battery", 0))
-                )
+                await ws_manager.broadcast(ws_connected_event(data.get("address", ""), data.get("battery", 0)))
             elif event == DeviceEvent.DISCONNECTED:
                 await ws_manager.broadcast(ws_disconnected_event())
             elif event == DeviceEvent.BATTERY:
@@ -174,8 +172,7 @@ class DeviceManager:
                 from coyote_server.models import ScanResultItem
 
                 app_state.last_scan = [
-                    ScanResultItem(address=d.address, name=d.name, rssi=d.rssi).model_dump()
-                    for d in devices
+                    ScanResultItem(address=d.address, name=d.name, rssi=d.rssi).model_dump() for d in devices
                 ]
 
                 # Connect to the strongest device

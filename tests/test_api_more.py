@@ -19,7 +19,6 @@ from fastapi.testclient import TestClient
 
 import coyote_server.api.channels as channels_api
 import coyote_server.api.device as device_api
-import coyote_server.device_manager as dm_mod
 from coyote_server.api.channels import router as channels_router
 from coyote_server.api.device import router as device_router
 from coyote_server.device_manager import DeviceManager
@@ -132,8 +131,9 @@ class TestDeviceApiBranches:
         state = _make_state(FakeDevice(connected=False))
 
         devices = [DiscoveredDevice(address="AA", name="47L121000", rssi=-55)]
-        with patch.object(device_api, "app_state", state), patch.object(
-            device_api, "scan_for_coyote", new=AsyncMock(return_value=devices)
+        with (
+            patch.object(device_api, "app_state", state),
+            patch.object(device_api, "scan_for_coyote", new=AsyncMock(return_value=devices)),
         ):
             resp = client.post("/api/scan", json={"timeout": 2.0})
 
@@ -145,8 +145,9 @@ class TestDeviceApiBranches:
         client = _build_client()
         state = _make_state(FakeDevice(connected=False))
 
-        with patch.object(device_api, "app_state", state), patch.object(
-            device_api, "scan_for_coyote", new=AsyncMock(side_effect=RuntimeError("ble down"))
+        with (
+            patch.object(device_api, "app_state", state),
+            patch.object(device_api, "scan_for_coyote", new=AsyncMock(side_effect=RuntimeError("ble down"))),
         ):
             resp = client.post("/api/scan", json={"timeout": 2.0})
 
